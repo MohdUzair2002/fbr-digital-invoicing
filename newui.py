@@ -793,6 +793,34 @@ def load_css():
         unsafe_allow_html=True,
     )
 
+def validate_invoice_api(invoice_data, bearer_token):
+    """Send invoice data to FBR validation API endpoint"""
+    try:
+        api_url = "https://gw.fbr.gov.pk/di_data/v1/di/validateinvoicedata_sb"
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {bearer_token}",
+        }
+        print(invoice_data)
+        response = requests.post(api_url, json=invoice_data, headers=headers)
+        return response.status_code, response.json()
+    except Exception as e:
+        return None, {"error": str(e)}
+
+
+def post_invoice_api(invoice_data, bearer_token):
+    """Send invoice data to FBR post API endpoint"""
+    try:
+        api_url = "https://gw.fbr.gov.pk/di_data/v1/di/postinvoicedata_sb"
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {bearer_token}",
+        }
+        response = requests.post(api_url, json=invoice_data, headers=headers)
+        return response.status_code, response.json()
+    except Exception as e:
+        return None, {"error": str(e)}
+
 
 # Enhanced Components
 def create_header(title, subtitle=""):
@@ -830,6 +858,14 @@ def create_stats_card(number, label):
         unsafe_allow_html=True,
     )
 
+def get_seller_count():
+    """Get total number of registered sellers"""
+    conn = sqlite3.connect("sellers.db")
+    cursor = conn.cursor()
+    cursor.execute("SELECT COUNT(*) FROM sellers")
+    count = cursor.fetchone()[0]
+    conn.close()
+    return count
 
 def create_success_message(message, details=None):
     """Enhanced success message with optional details"""
@@ -1151,69 +1187,107 @@ def show_dashboard():
     # Seller Registration Sidebar (Admin only)
     with st.sidebar:
         st.markdown("### ➕ Register New Seller")
-        st.markdown("*Add new sellers to the system*")
+        
+        # Check current seller count
+        current_seller_count = get_seller_count()
+        max_sellers = 15
+        remaining_slots = max_sellers - current_seller_count
+        
+        # Show capacity status
+        if current_seller_count >= max_sellers:
+            st.markdown(
+                f"""
+            <div style="background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+                        color: white; padding: 1rem; border-radius: 10px; text-align: center; margin-bottom: 1rem;">
+                <h4 style="margin: 0;">🚫 Registration Limit Reached</h4>
+                <p style="margin: 0.5rem 0 0 0; font-size: 0.9rem;">Maximum {max_sellers} sellers allowed</p>
+            </div>
+            """,
+                unsafe_allow_html=True,
+            )
+            st.warning(f"⚠️ You have reached the maximum limit of {max_sellers} sellers. Cannot register more sellers.")
+        else:
+            # Show remaining slots
+            st.markdown(
+                f"""
+            <div style="background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+                        color: white; padding: 1rem; border-radius: 10px; text-align: center; margin-bottom: 1rem;">
+                <h4 style="margin: 0;">📊 Registration Capacity</h4>
+                <p style="margin: 0.5rem 0 0 0; font-size: 0.9rem;">{remaining_slots} slots remaining ({current_seller_count}/{max_sellers})</p>
+            </div>
+            """,
+                unsafe_allow_html=True,
+            )
+            
+            st.markdown("*Add new sellers to the system*")
 
-        with st.form("seller_form"):
-            seller_ntn_cnic = st.text_input(
-                "🆔 Seller NTN/CNIC", placeholder="Enter NTN or CNIC"
-            )
-            seller_business_name = st.text_input(
-                "🏢 Business Name", placeholder="Enter business name"
-            )
-            seller_province = st.selectbox(
-                "🌍 Province",
-                [
-                    "",
-                    "Sindh",
-                    "Punjab",
-                    "Khyber Pakhtunkhwa",
-                    "Balochistan",
-                    "Gilgit-Baltistan",
-                    "Azad Kashmir",
-                    "Islamabad Capital Territory",
-                ],
-            )
-            seller_address = st.text_area(
-                "📍 Address", placeholder="Enter complete address"
-            )
-            bearer_token = st.text_input(
-                "🔑 Bearer Token", placeholder="Enter API bearer token", type="password"
-            )
+            with st.form("seller_form"):
+                seller_ntn_cnic = st.text_input(
+                    "🆔 Seller NTN/CNIC", placeholder="Enter NTN or CNIC"
+                )
+                seller_business_name = st.text_input(
+                    "🏢 Business Name", placeholder="Enter business name"
+                )
+                seller_province = st.selectbox(
+                    "🌍 Province",
+                    [
+                        "",
+                        "Sindh",
+                        "Punjab",
+                        "Khyber Pakhtunkhwa",
+                        "Balochistan",
+                        "Gilgit-Baltistan",
+                        "Azad Kashmir",
+                        "Islamabad Capital Territory",
+                    ],
+                )
+                seller_address = st.text_area(
+                    "📍 Address", placeholder="Enter complete address"
+                )
+                bearer_token = st.text_input(
+                    "🔑 Bearer Token", placeholder="Enter API bearer token", type="password"
+                )
 
-            submitted = st.form_submit_button(
-                "💾 Register Seller", use_container_width=True
-            )
+                submitted = st.form_submit_button(
+                    "💾 Register Seller", use_container_width=True
+                )
 
-            if submitted:
-                if (
-                    seller_ntn_cnic
-                    and seller_business_name
-                    and seller_province
-                    and seller_address
-                    and bearer_token
-                ):
-                    seller_data = {
-                        "seller_ntn_cnic": seller_ntn_cnic,
-                        "seller_business_name": seller_business_name,
-                        "seller_province": seller_province,
-                        "seller_address": seller_address,
-                        "bearer_token": bearer_token,
-                    }
+                if submitted:
+                    # Double-check limit before registration
+                    if get_seller_count() >= max_sellers:
+                        create_error_message(
+                            f"Registration failed: Maximum limit of {max_sellers} sellers reached",
+                            details="Please contact the system administrator if you need to register more sellers."
+                        )
+                    elif (
+                        seller_ntn_cnic
+                        and seller_business_name
+                        and seller_province
+                        and seller_address
+                        and bearer_token
+                    ):
+                        seller_data = {
+                            "seller_ntn_cnic": seller_ntn_cnic,
+                            "seller_business_name": seller_business_name,
+                            "seller_province": seller_province,
+                            "seller_address": seller_address,
+                            "bearer_token": bearer_token,
+                        }
 
-                    seller_id = save_seller(seller_data)
-                    create_success_message(
-                        f"Seller registered successfully! ID: {seller_id}"
-                    )
-                    st.rerun()
-                else:
-                    create_error_message("Please fill all required fields")
+                        seller_id = save_seller(seller_data)
+                        create_success_message(
+                            f"Seller registered successfully! ID: {seller_id}",
+                            details=f"Remaining slots: {max_sellers - get_seller_count()}/{max_sellers}"
+                        )
+                        st.rerun()
+                    else:
+                        create_error_message("Please fill all required fields")
 
         # Logout button
         if st.button("🚪 Logout", use_container_width=True, type="secondary"):
             for key in list(st.session_state.keys()):
                 del st.session_state[key]
             st.rerun()
-
 
     st.markdown(
             """
@@ -1952,6 +2026,7 @@ def validate_invoice_api(invoice_data, bearer_token):
             "Content-Type": "application/json",
             "Authorization": f"Bearer {bearer_token}",
         }
+        print(invoice_data)
         response = requests.post(api_url, json=invoice_data, headers=headers)
         return response.status_code, response.json()
     except Exception as e:
@@ -3840,6 +3915,7 @@ def show_invoice_form():
                             create_error_message("FBR post failed")
                             if response:
                                 st.json(response)
+    
     else:
         st.error("Seller not found!")
         if st.button("⬅️ Back to Dashboard"):
@@ -4418,6 +4494,7 @@ def show_excel_invoice_auto():
             else:
                 st.info("📄 Post invoices first to generate PDFs")
 
+        
     # Show expected format when no file uploaded
     if uploaded_file is None:
         st.markdown("### 📋 Expected Excel Format")
