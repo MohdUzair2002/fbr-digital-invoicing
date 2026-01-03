@@ -1,7 +1,7 @@
-streamlit==1.37.1
-pandas==2.2.2
-requests==2.32.3
-bcrypt==4.1.2
-reportlab==4.2.2
-XlsxWriter==3.2.0
+streamlit==1.49.1
+pandas==2.3.2
+requests==2.32.5
+bcrypt==4.3.0
+reportlab==4.4.3
+XlsxWriter==3.2.5
 openpyxl==3.1.5
