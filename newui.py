@@ -1243,10 +1243,10 @@ def show_dashboard():
                 )
                 seller_address = st.text_area(
                     "📍 Address", placeholder="Enter complete address"
-                )
+                ).strip()
                 bearer_token = st.text_input(
                     "🔑 Bearer Token", placeholder="Enter API bearer token", type="password"
-                )
+                ).strip()
 
                 submitted = st.form_submit_button(
                     "💾 Register Seller", use_container_width=True
