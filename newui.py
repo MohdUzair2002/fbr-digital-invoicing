@@ -3818,10 +3818,12 @@ def show_invoice_form():
 
                         if status_code == 200:
                             create_success_message("FBR Validation Successful!")
+                            st.json(invoice_data)
                             st.json(response)
                         else:
                             create_error_message("FBR Validation Failed")
                             if response:
+                                st.json(invoice_data)
                                 st.json(response)
 
         with col6:
@@ -4287,9 +4289,11 @@ def show_excel_invoice_auto():
 
                 if successful_validations > 0:
                     create_success_message(
-                        f"FBR Validation successful for {successful_validations} invoices!"
+                        f"FBR Validation successful for {successful_validations} invoices!",
+                        st.json(invoice_item["invoice_data"])
                     )
-
+                    
+                   
                     with st.expander(
                         f"✅ Successful Validations ({successful_validations})",
                         expanded=True,
@@ -4304,7 +4308,8 @@ def show_excel_invoice_auto():
 
                 if failed_validations > 0:
                     create_error_message(
-                        f"FBR Validation failed for {failed_validations} invoices"
+                        f"FBR Validation failed for {failed_validations} invoices",
+                        st.json(invoice_item["invoice_data"])
                     )
 
                     with st.expander(
