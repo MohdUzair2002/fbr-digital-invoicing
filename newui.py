@@ -1244,7 +1244,7 @@ def show_dashboard():
                 seller_address = st.text_area(
                     "📍 Address", placeholder="Enter complete address"
                 )
-                seller_address=seller_address.strip()
+                seller_address=seller_address
                 bearer_token = st.text_input(
                     "🔑 Bearer Token", placeholder="Enter API bearer token", type="password"
                 )
@@ -2498,7 +2498,7 @@ def process_excel_row_auto(row, mapping, seller, idx):
         ).strip()
         buyer_address_value = str(
             row.get(mapping.get("buyer_address", ""), "N/A")
-        ).strip()
+        ).strip().replace("\n", " ")
 
         # Handle unregistered buyers
         if (
@@ -3730,6 +3730,8 @@ def show_invoice_form():
 
         # Items section (removed duplicate legacy expander)
 
+       # Replace the validation and posting section in show_invoice_form() with this:
+
         # Action buttons
         st.markdown("### 🚀 Invoice Actions")
 
@@ -3818,54 +3820,83 @@ def show_invoice_form():
                         )
 
                         if status_code == 200:
-                            create_success_message("FBR Validation Successful!")
-                            st.json(invoice_data)
+                            create_success_message("✅ FBR Validation Successful!")
+                            
+                            # Store validated invoice data in session for later use
+                            st.session_state.validated_invoice_data = invoice_data
+                            st.session_state.validated_invoice_response = response
+                            
                             st.json(response)
+                            
+                            # Generate PDF immediately after validation
+                            st.markdown("### 📄 Invoice PDF")
+                            try:
+                                pdf_buffer = generate_invoice_pdf(invoice_data, response)
+                                invoice_filename = f"Invoice_{seller[1]}_{invoice_date.strftime('%Y-%m-%d')}.pdf"
+
+                                st.download_button(
+                                    label="📄 Download Invoice PDF",
+                                    data=pdf_buffer.getvalue(),
+                                    file_name=invoice_filename,
+                                    mime="application/pdf",
+                                    type="secondary",
+                                    key="validate_pdf_download"
+                                )
+                                
+                                create_success_message(
+                                    "PDF generated successfully! You can download it above or proceed to post to FBR."
+                                )
+                                
+                            except Exception as e:
+                                create_error_message(f"PDF generation failed: {str(e)}")
+                            
                         else:
-                            create_error_message("FBR Validation Failed")
+                            create_error_message("❌ FBR Validation Failed")
                             if response:
-                                st.json(invoice_data)
                                 st.json(response)
 
         with col6:
             if st.button("📤 Post to FBR", use_container_width=True, type="primary"):
-                # Same validation and posting logic
-                invoice_data = {
-                    "sellerNTNCNIC": seller[1],
-                    "sellerBusinessName": seller[2],
-                    "sellerProvince": seller[3],
-                    "sellerAddress": seller[4],
-                    "invoiceType": invoice_type,
-                    "invoiceDate": invoice_date.strftime("%Y-%m-%d"),
-                    "buyerNTNCNIC": buyer_ntn_cnic,
-                    "buyerBusinessName": buyer_business_name,
-                    "buyerProvince": buyer_province,
-                    "buyerAddress": buyer_address,
-                    "buyerRegistrationType": buyer_registration_type,
-                    "invoiceRefNo": invoice_ref_no,
-                    "scenarioId": scenario_id,
-                    "items": [
-                        {
-                            "hsCode": hs_code,
-                            "productDescription": product_description,
-                            "rate": rate,
-                            "uoM": uom,
-                            "quantity": quantity,
-                            "valueSalesExcludingST": value_sales_excluding_st,
-                            "salesTaxApplicable": sales_tax_applicable,
-                            "furtherTax": further_tax,
-                            "extraTax": extra_tax,
-                            "salesTaxWithheldAtSource": sales_tax_withheld,
-                            "fixedNotifiedValueOrRetailPrice": 0.00,
-                            "fedPayable": fed_payable,
-                            "discount": discount,
-                            "totalValues": total_values,
-                            "saleType": sale_type,
-                            "sroScheduleNo": sro_schedule_no,
-                            "sroItemSerialNo": sro_item_serial_no,
-                        }
-                    ],
-                }
+                # Use stored validated data if available, otherwise create new
+                if hasattr(st.session_state, 'validated_invoice_data'):
+                    invoice_data = st.session_state.validated_invoice_data
+                else:
+                    invoice_data = {
+                        "sellerNTNCNIC": seller[1],
+                        "sellerBusinessName": seller[2],
+                        "sellerProvince": seller[3],
+                        "sellerAddress": seller[4],
+                        "invoiceType": invoice_type,
+                        "invoiceDate": invoice_date.strftime("%Y-%m-%d"),
+                        "buyerNTNCNIC": buyer_ntn_cnic,
+                        "buyerBusinessName": buyer_business_name,
+                        "buyerProvince": buyer_province,
+                        "buyerAddress": buyer_address,
+                        "buyerRegistrationType": buyer_registration_type,
+                        "invoiceRefNo": invoice_ref_no,
+                        "scenarioId": scenario_id,
+                        "items": [
+                            {
+                                "hsCode": hs_code,
+                                "productDescription": product_description,
+                                "rate": rate,
+                                "uoM": uom,
+                                "quantity": quantity,
+                                "valueSalesExcludingST": value_sales_excluding_st,
+                                "salesTaxApplicable": sales_tax_applicable,
+                                "furtherTax": further_tax,
+                                "extraTax": extra_tax,
+                                "salesTaxWithheldAtSource": sales_tax_withheld,
+                                "fixedNotifiedValueOrRetailPrice": 0.00,
+                                "fedPayable": fed_payable,
+                                "discount": discount,
+                                "totalValues": total_values,
+                                "saleType": sale_type,
+                                "sroScheduleNo": sro_schedule_no,
+                                "sroItemSerialNo": sro_item_serial_no,
+                            }
+                        ],
+                    }
 
                 # Quick validation
                 required_fields = [
@@ -3892,30 +3923,37 @@ def show_invoice_form():
 
                         if status_code == 200:
                             create_success_message(
-                                "Invoice posted successfully to FBR!"
+                                "✅ Invoice posted successfully to FBR!"
                             )
                             st.json(response)
-
-                            # Generate PDF after successful posting
+                            
+                            # Generate updated PDF with FBR response data after posting
                             try:
-                                pdf_buffer = generate_invoice_pdf(
-                                    invoice_data, response
-                                )
-                                invoice_filename = f"Invoice_{seller[1]}_{invoice_date.strftime('%Y-%m-%d')}.pdf"
+                                pdf_buffer = generate_invoice_pdf(invoice_data, response)
+                                invoice_filename = f"Invoice_Posted_{seller[1]}_{invoice_date.strftime('%Y-%m-%d')}.pdf"
 
                                 st.download_button(
-                                    label="📄 Download Invoice PDF",
+                                    label="📄 Download Updated Invoice PDF (with FBR Data)",
                                     data=pdf_buffer.getvalue(),
                                     file_name=invoice_filename,
                                     mime="application/pdf",
                                     type="secondary",
+                                    key="post_pdf_download"
+                                )
+                                
+                                create_success_message(
+                                    "Updated PDF with FBR confirmation generated!"
                                 )
 
                             except Exception as e:
                                 create_error_message(f"PDF generation failed: {str(e)}")
+                            
+                            # Reset form for next invoice
+                            st.session_state.invoice_step = 0
+                            st.session_state.invoice_form_data = {}
 
                         else:
-                            create_error_message("FBR post failed")
+                            create_error_message("❌ FBR post failed")
                             if response:
                                 st.json(response)
     
@@ -4224,14 +4262,25 @@ def show_excel_invoice_auto():
             create_error_message(f"Error reading Excel file: {str(e)}")
             st.info("Please ensure your file is a valid Excel (.xlsx or .xls) format")
 
-    # Action buttons for processed invoices
+   # Action buttons for processed invoices
     if st.session_state.processed_invoices:
         st.markdown("### 🚀 Bulk Invoice Actions")
 
         col5, col6, col7 = st.columns(3)
 
+       # Add this at the top of your show_excel_invoice_auto() function after the seller check
+        # Initialize comprehensive session state for PDF generation
+        if "excel_validation_results" not in st.session_state:
+            st.session_state.excel_validation_results = None
+        if "excel_validated_zip_buffer" not in st.session_state:
+            st.session_state.excel_validated_zip_buffer = None
+        if "excel_validation_complete" not in st.session_state:
+            st.session_state.excel_validation_complete = False
+
+        # Then replace the validation button section with this corrected code:
+
         with col5:
-            if st.button("✅ Validate All Invoices", use_container_width=True):
+            if st.button("✅ Validate All Invoices", use_container_width=True, key="excel_validate_all_btn"):
                 validation_results = []
 
                 progress_bar = st.progress(0)
@@ -4253,6 +4302,7 @@ def show_excel_invoice_auto():
                             {
                                 "row_number": invoice_item["row_number"],
                                 "buyer_name": invoice_item["buyer_name"],
+                                "invoice_data": invoice_item["invoice_data"],
                                 "status_code": status_code,
                                 "response": response,
                                 "success": status_code == 200,
@@ -4263,6 +4313,7 @@ def show_excel_invoice_auto():
                             {
                                 "row_number": invoice_item["row_number"],
                                 "buyer_name": invoice_item["buyer_name"],
+                                "invoice_data": invoice_item["invoice_data"],
                                 "status_code": None,
                                 "response": {"error": str(e)},
                                 "success": False,
@@ -4272,61 +4323,138 @@ def show_excel_invoice_auto():
                 progress_bar.empty()
                 status_text.empty()
 
-                st.session_state.validation_results = validation_results
+                # Store validation results in session state PERMANENTLY
+                st.session_state.excel_validation_results = validation_results
+                st.session_state.excel_validation_complete = True
 
-                successful_validations = sum(
-                    1 for r in validation_results if r["success"]
+                # Force rerun to display results
+                st.rerun()
+
+        # Display validation results if they exist (persistent across reruns)
+        if st.session_state.excel_validation_complete and st.session_state.excel_validation_results:
+            validation_results = st.session_state.excel_validation_results
+            
+            successful_validations = sum(1 for r in validation_results if r["success"])
+            failed_validations = len(validation_results) - successful_validations
+
+            # Display results
+            st.markdown("### 📋 Validation Results")
+
+            col_success, col_failed = st.columns(2)
+            with col_success:
+                create_stats_card(successful_validations, "Successful Validations")
+            with col_failed:
+                create_stats_card(failed_validations, "Failed Validations")
+
+            if successful_validations > 0:
+                create_success_message(
+                    f"FBR Validation successful for {successful_validations} invoices!"
                 )
-                failed_validations = len(validation_results) - successful_validations
 
-                # Display results
-                st.markdown("### 📋 Validation Results")
+                with st.expander(
+                    f"✅ Successful Validations ({successful_validations})",
+                    expanded=False,
+                ):
+                    for result in validation_results:
+                        if result["success"]:
+                            st.success(
+                                f"**Row {result['row_number']} - {result['buyer_name']}** ✅"
+                            )
+                            st.json(result["response"])
+                            st.divider()
 
-                col_success, col_failed = st.columns(2)
-                with col_success:
-                    create_stats_card(successful_validations, "Successful Validations")
-                with col_failed:
-                    create_stats_card(failed_validations, "Failed Validations")
+            if failed_validations > 0:
+                create_error_message(
+                    f"FBR Validation failed for {failed_validations} invoices"
+                )
 
-                if successful_validations > 0:
-                    create_success_message(
-                        f"FBR Validation successful for {successful_validations} invoices!",
-                        st.json(invoice_item["invoice_data"])
+                with st.expander(
+                    f"❌ Validation Failures ({failed_validations})", expanded=False
+                ):
+                    for result in validation_results:
+                        if not result["success"]:
+                            st.error(
+                                f"**Row {result['row_number']} - {result['buyer_name']}** ❌"
+                            )
+                            if result["status_code"]:
+                                st.write(f"**Status Code:** {result['status_code']}")
+                            st.json(result["response"])
+                            st.divider()
+
+            # PDF GENERATION SECTION - Persistent
+            if successful_validations > 0:
+                st.markdown("### 📄 Download Validated Invoices")
+                
+                pdf_col1, pdf_col2 = st.columns([2, 1])
+                
+                with pdf_col1:
+                    if st.button(
+                        "📦 Generate PDFs for Validated Invoices",
+                        type="primary",
+                        use_container_width=True,
+                        key="generate_validated_pdfs_excel_btn"
+                    ):
+                        try:
+                            with st.spinner("⏳ Generating PDF invoices..."):
+                                zip_buffer = io.BytesIO()
+                                with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zip_file:
+                                    progress_bar = st.progress(0)
+                                    status_text = st.empty()
+
+                                    successful_count = 0
+                                    for idx, result in enumerate(validation_results):
+                                        if result["success"]:
+                                            successful_count += 1
+                                            status_text.text(
+                                                f"Generating PDF {successful_count} of {successful_validations}"
+                                            )
+                                            progress_bar.progress(successful_count / successful_validations)
+
+                                            try:
+                                                pdf_buffer = generate_invoice_pdf(
+                                                    result["invoice_data"], result["response"]
+                                                )
+                                                safe_buyer_name = "".join(
+                                                    c for c in result["buyer_name"]
+                                                    if c.isalnum() or c in (" ", "-", "_")
+                                                ).rstrip()
+                                                filename = f"Invoice_Validated_Row_{result['row_number']}_{safe_buyer_name[:20]}.pdf"
+                                                zip_file.writestr(filename, pdf_buffer.getvalue())
+                                            except Exception as e:
+                                                st.error(
+                                                    f"Failed to generate PDF for row {result['row_number']}: {str(e)}"
+                                                )
+
+                                    progress_bar.empty()
+                                    status_text.empty()
+
+                                zip_buffer.seek(0)
+                                st.session_state.excel_validated_zip_buffer = zip_buffer.getvalue()
+                                
+                        except Exception as e:
+                            create_error_message(f"Error generating PDFs: {str(e)}")
+                        create_success_message(f"Generated {successful_validations} validated PDF invoices!")
+
+                
+                # Show download button if ZIP has been generated (PERSISTENT)
+                if st.session_state.excel_validated_zip_buffer:
+                    st.success("✅ PDFs generated successfully! Download below:")
+                    st.download_button(
+                        label="⬇️ Download Validated Invoice PDFs (ZIP)",
+                        data=st.session_state.excel_validated_zip_buffer,
+                        file_name=f"Invoices_Validated_{seller[1]}_{date.today().strftime('%Y-%m-%d')}.zip",
+                        mime="application/zip",
+                        key="download_validated_pdfs_excel_btn",
+                        use_container_width=True,
+                        type="secondary"
                     )
                     
-                   
-                    with st.expander(
-                        f"✅ Successful Validations ({successful_validations})",
-                        expanded=True,
-                    ):
-                        for result in validation_results:
-                            if result["success"]:
-                                st.success(
-                                    f"**Row {result['row_number']} - {result['buyer_name']}** ✅"
-                                )
-                                st.json(result["response"])
-                                st.divider()
+                    # Option to clear and regenerate
+                    if st.button("🔄 Regenerate PDFs", key="regenerate_validated_pdfs_btn", help="Click to regenerate the PDF files"):
+                        st.session_state.excel_validated_zip_buffer = None
+                        st.rerun()
+                       
 
-                if failed_validations > 0:
-                    create_error_message(
-                        f"FBR Validation failed for {failed_validations} invoices",
-                        st.json(invoice_item["invoice_data"])
-                    )
-
-                    with st.expander(
-                        f"❌ Validation Failures ({failed_validations})", expanded=True
-                    ):
-                        for result in validation_results:
-                            if not result["success"]:
-                                st.error(
-                                    f"**Row {result['row_number']} - {result['buyer_name']}** ❌"
-                                )
-                                if result["status_code"]:
-                                    st.write(
-                                        f"**Status Code:** {result['status_code']}"
-                                    )
-                                st.json(result["response"])
-                                st.divider()
 
         with col6:
             if st.button(
@@ -4444,7 +4572,7 @@ def show_excel_invoice_auto():
             if st.session_state.posting_results and any(
                 r["success"] for r in st.session_state.posting_results
             ):
-                if st.button("📄 Generate PDF Package", use_container_width=True):
+                if st.button("📄 Generate PDF Package (Posted)", use_container_width=True, key="post_pdf_excel"):
                     successful_posts = [
                         r for r in st.session_state.posting_results if r["success"]
                     ]
@@ -4473,7 +4601,7 @@ def show_excel_invoice_auto():
                                         for c in result["buyer_name"]
                                         if c.isalnum() or c in (" ", "-", "_")
                                     ).rstrip()
-                                    filename = f"Invoice_Row_{result['row_number']}_{safe_buyer_name[:20]}.pdf"
+                                    filename = f"Invoice_Posted_Row_{result['row_number']}_{safe_buyer_name[:20]}.pdf"
                                     zip_file.writestr(filename, pdf_buffer.getvalue())
 
                                 except Exception as e:
@@ -4487,18 +4615,19 @@ def show_excel_invoice_auto():
                         zip_buffer.seek(0)
 
                         st.download_button(
-                            label="📦 Download All Invoice PDFs",
+                            label="📦 Download Posted Invoice PDFs (with FBR Data)",
                             data=zip_buffer.getvalue(),
-                            file_name=f"Invoices_{seller[1]}_{date.today().strftime('%Y-%m-%d')}.zip",
+                            file_name=f"Invoices_Posted_{seller[1]}_{date.today().strftime('%Y-%m-%d')}.zip",
                             mime="application/zip",
                             type="secondary",
+                            key="post_pdf_download_excel"
                         )
 
                         create_success_message(
-                            f"Generated {len(successful_posts)} PDF invoices!"
+                            f"Generated {len(successful_posts)} posted PDF invoices with FBR confirmation!"
                         )
             else:
-                st.info("📄 Post invoices first to generate PDFs")
+                st.info("📄 Validate and post invoices first to generate PDFs")
 
         
     # Show expected format when no file uploaded
