@@ -3367,6 +3367,9 @@ def process_invoice_submission(seller, form_data):
         st.error("Please check your input and try again.")
 
 
+# Replace the show_invoice_form() function with this corrected version
+# Focus on the initialization and form data handling sections
+
 def show_invoice_form():
     seller = get_seller_by_id(st.session_state.selected_seller_id)
 
@@ -3383,14 +3386,12 @@ def show_invoice_form():
         col1, col2 = st.columns([5, 1])
         with col2:
             if user_type == "guest":
-                # Guest users go back to dashboard
                 if st.button(
                     "⬅️ Back", use_container_width=True, key="guest_invoice_back_btn"
                 ):
                     go_to_dashboard()
                     st.rerun()
             else:
-                # Admin users go back to search
                 if st.button(
                     "⬅️ Back to Search",
                     use_container_width=True,
@@ -3414,19 +3415,8 @@ def show_invoice_form():
             unsafe_allow_html=True,
         )
 
-        # Step-by-step form with progress
-        st.markdown("### 📝 Invoice Creation Steps")
-        
-        # Progress indicator
-        steps = ["Buyer Info", "Invoice Details", "Product Items", "Review & Submit"]
-        current_step = st.session_state.get("invoice_step", 0)
-        
-        # Progress bar
-        progress = st.progress((current_step + 1) / len(steps))
-        st.markdown(f"**Step {current_step + 1} of {len(steps)}: {steps[current_step]}**")
-        
-        # Initialize form data in session state
-        if "invoice_form_data" not in st.session_state:
+        # CRITICAL: Initialize form data with ALL required keys before any access
+        if "invoice_form_data" not in st.session_state or not st.session_state.invoice_form_data:
             st.session_state.invoice_form_data = {
                 "buyer_ntn_cnic": "",
                 "buyer_business_name": "",
@@ -3439,8 +3429,8 @@ def show_invoice_form():
                 "scenario_id": "",
                 "hs_code": "",
                 "product_description": "",
-                "rate": "",
-                "uom": "",
+                "rate": "18%",
+                "uom": "PCS",
                 "quantity": 1,
                 "value_sales_excluding_st": 0.0,
                 "sales_tax_applicable": 0.0,
@@ -3453,284 +3443,277 @@ def show_invoice_form():
                 "sro_schedule_no": "",
                 "sro_item_serial_no": ""
             }
+
+        # Reference the initialized form data
+        form_data = st.session_state.invoice_form_data
+
+        # Step-by-step form with progress
+        st.markdown("### 📝 Invoice Creation Steps")
         
+        # Progress indicator
+        steps = ["Buyer Info", "Invoice Details", "Product Items", "Review & Submit"]
+        current_step = st.session_state.get("invoice_step", 0)
+        
+        # Progress bar
+        progress = st.progress((current_step + 1) / len(steps))
+        st.markdown(f"**Step {current_step + 1} of {len(steps)}: {steps[current_step]}**")
+
+        # Buyer Information
+        st.markdown("#### 🛒 Step 1: Buyer Information")
+        st.info("💡 Fill in the buyer's details. All fields marked with * are required.")
+        
+        # Safe access with default values
+        invoice_type = st.selectbox(
+            "📑 Invoice Type",
+            ["Sale Invoice", "Credit Note", "Debit Note"],
+            index=["Sale Invoice", "Credit Note", "Debit Note"].index(
+                form_data.get("invoice_type", "Sale Invoice")
+            ),
+            help="Select the type of invoice you are creating",
+        )
+
+        invoice_date = st.date_input(
+            "📅 Invoice Date", 
+            value=form_data.get("invoice_date", date.today()) if isinstance(form_data.get("invoice_date"), date) else date.today()
+        )
+
+        invoice_ref_no = st.text_input(
+            "🔢 Invoice Reference No *",
+            value=form_data.get("invoice_ref_no", ""),
+            placeholder="Enter reference number",
+            help="Required: Enter your internal invoice reference number",
+        )
+
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            buyer_ntn_cnic = st.text_input(
+                "🆔 Buyer NTN/CNIC", 
+                value=form_data.get("buyer_ntn_cnic", ""),
+                placeholder="Enter buyer NTN/CNIC",
+                help="Enter the buyer's NTN or CNIC number"
+            )
+            buyer_business_name = st.text_input(
+                "🏢 Buyer Business Name *", 
+                value=form_data.get("buyer_business_name", ""),
+                placeholder="Enter business name",
+                help="Required: Enter the buyer's business name"
+            )
+            buyer_province = st.selectbox(
+                "🌍 Buyer Province *",
+                [
+                    "",
+                    "Sindh",
+                    "Punjab", 
+                    "Khyber Pakhtunkhwa",
+                    "Balochistan",
+                    "Gilgit-Baltistan",
+                    "Azad Kashmir",
+                    "Islamabad Capital Territory",
+                ],
+                index=["", "Sindh", "Punjab", "Khyber Pakhtunkhwa", "Balochistan",
+                    "Gilgit-Baltistan", "Azad Kashmir", "Islamabad Capital Territory"].index(
+                    form_data.get("buyer_province", "")
+                ) if form_data.get("buyer_province", "") in ["", "Sindh", "Punjab", "Khyber Pakhtunkhwa", "Balochistan",
+                    "Gilgit-Baltistan", "Azad Kashmir", "Islamabad Capital Territory"] else 0
+            )
+        
+        with col2:
+            buyer_address = st.text_input(
+                "📍 Buyer Address *", 
+                value=form_data.get("buyer_address", ""),
+                placeholder="Enter buyer address",
+                help="Required: Enter the buyer's complete address"
+            )
+            buyer_registration_type = st.selectbox(
+                "📋 Registration Type *", 
+                ["", "Unregistered", "Registered"],
+                index=["", "Unregistered", "Registered"].index(
+                    form_data.get("buyer_registration_type", "")
+                ) if form_data.get("buyer_registration_type", "") in ["", "Unregistered", "Registered"] else 0
+            )
+        
+        # Update session state after Step 1
+        st.session_state.invoice_form_data.update({
+            "buyer_ntn_cnic": buyer_ntn_cnic,
+            "buyer_business_name": buyer_business_name,
+            "buyer_province": buyer_province,
+            "buyer_address": buyer_address,
+            "buyer_registration_type": buyer_registration_type,
+            "invoice_type": invoice_type,
+            "invoice_date": invoice_date,
+            "invoice_ref_no": invoice_ref_no,
+        })
+
+        # Invoice Information (Step 2)
+        st.markdown("#### 📄 Step 2: Invoice Information")
+        st.info("💡 Enter the invoice details and reference information.")
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            pass
+        
+        with col2:
+            scenario_id = st.text_input(
+                "🎯 Scenario ID *", 
+                value=form_data.get("scenario_id", ""),
+                placeholder="Enter scenario ID (e.g., SN002)",
+                help="Required: Enter the FBR scenario ID (e.g., SN002)"
+            )
+            sale_type = st.text_input(
+                "🏪 Sale Type",
+                value=form_data.get("sale_type", ""),
+                placeholder="Optional sale type label"
+            )
+        
+        st.session_state.invoice_form_data.update({
+            "scenario_id": scenario_id,
+            "sale_type": sale_type,
+        })
+
+        # Product Items (Step 3)
+        st.markdown("#### 📦 Step 3: Product Items")
+        st.info("💡 Enter the product details and pricing information.")
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            hs_code = st.text_input(
+                "🏷️ HS Code *", 
+                value=form_data.get("hs_code", ""),
+                placeholder="Enter HS code",
+                help="Required: Enter the Harmonized System code"
+            )
+            product_description = st.text_input(
+                "📝 Product Description *", 
+                value=form_data.get("product_description", ""),
+                placeholder="Enter product description",
+                help="Required: Enter detailed product description"
+            )
+            rate = st.text_input(
+                "📊 Tax Rate *", 
+                value=form_data.get("rate", "18%"),
+                placeholder="Enter tax rate (e.g., 18%)",
+                help="Required: Enter the tax rate percentage"
+            )
+            uom = st.text_input(
+                "📏 Unit of Measure *", 
+                value=form_data.get("uom", "PCS"),
+                placeholder="Enter unit of measure",
+                help="Required: Enter unit of measure (e.g., PCS, KG, LTR)"
+            )
+        
+        with col2:
+            quantity = st.number_input(
+                "🔢 Quantity *", 
+                min_value=1, 
+                value=int(form_data.get("quantity", 1)),
+                help="Required: Enter the quantity"
+            )
+            value_sales_excluding_st = st.number_input(
+                "💰 Value (Excluding Sales Tax) *", 
+                min_value=0.0, 
+                value=float(form_data.get("value_sales_excluding_st", 0.0)),
+                help="Required: Enter the value excluding sales tax"
+            )
+            sales_tax_applicable = st.number_input(
+                "🏛️ Sales Tax Applicable", 
+                min_value=0.0, 
+                value=float(form_data.get("sales_tax_applicable", 0.0))
+            )
+            further_tax = st.number_input(
+                "➕ Further Tax", 
+                min_value=0.0, 
+                value=float(form_data.get("further_tax", 0.0))
+            )
+        
+        # Additional fields
+        col3, col4 = st.columns(2)
+        with col3:
+            extra_tax = st.number_input("📈 Extra Tax", min_value=0.0, value=float(form_data.get("extra_tax", 0.0)))
+            sales_tax_withheld = st.number_input("⚖️ Sales Tax Withheld at Source", min_value=0.0, value=float(form_data.get("sales_tax_withheld", 0.0)))
+            fed_payable = st.number_input("🏦 FED Payable", min_value=0.0, value=float(form_data.get("fed_payable", 0.0)))
+        
+        with col4:
+            discount = st.number_input("💸 Discount", min_value=0.0, value=float(form_data.get("discount", 0.0)))
+            sale_type_item = st.text_input("🏪 Sale Type", value=form_data.get("sale_type", ""), placeholder="Enter sale type")
+            sro_schedule_no = st.text_input("📋 SRO Schedule No", value=form_data.get("sro_schedule_no", ""), placeholder="Enter SRO schedule number")
+        
+        sro_item_serial_no = st.text_input("🔢 SRO Item Serial No", value=form_data.get("sro_item_serial_no", ""), placeholder="Enter SRO item serial number")
+        
+        # Calculate total
+        total_values = (
+            value_sales_excluding_st
+            + sales_tax_applicable
+            + further_tax
+            + extra_tax
+            - discount
+        )
+        
+        st.markdown(
+            f"""
+        <div style="background: linear-gradient(135deg, #10b981 0%, #059669 100%); 
+                    color: white; padding: 1rem; border-radius: 10px; text-align: center; margin: 1rem 0;">
+            <h3 style="margin: 0;">💰 Total Invoice Value</h3>
+            <h2 style="margin: 0.5rem 0 0 0;">₨ {total_values:,.2f}</h2>
+        </div>
+        """,
+            unsafe_allow_html=True,
+        )
+        
+        # Update session state with product info
+        st.session_state.invoice_form_data.update({
+            "hs_code": hs_code,
+            "product_description": product_description,
+            "rate": rate,
+            "uom": uom,
+            "quantity": quantity,
+            "value_sales_excluding_st": value_sales_excluding_st,
+            "sales_tax_applicable": sales_tax_applicable,
+            "further_tax": further_tax,
+            "extra_tax": extra_tax,
+            "sales_tax_withheld": sales_tax_withheld,
+            "fed_payable": fed_payable,
+            "discount": discount,
+            "sale_type": sale_type_item,
+            "sro_schedule_no": sro_schedule_no,
+            "sro_item_serial_no": sro_item_serial_no
+        })
+
+        # Review and Submit (Step 4)
+        st.markdown("#### ✅ Step 4: Review & Submit")
+        st.info("💡 Review all information before submitting to FBR.")
+        
+        # Get latest form data
         form_data = st.session_state.invoice_form_data
         
-        # Buyer Information (shown inline)
-        if True:
-            st.markdown("#### 🛒 Step 1: Buyer Information")
-            st.info("💡 Fill in the buyer's details. All fields marked with * are required.")
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.markdown("**🛒 Buyer Information:**")
+            st.write(f"• **Name:** {form_data.get('buyer_business_name', 'N/A')}")
+            st.write(f"• **NTN/CNIC:** {form_data.get('buyer_ntn_cnic', 'N/A') or 'N/A'}")
+            st.write(f"• **Province:** {form_data.get('buyer_province', 'N/A')}")
+            st.write(f"• **Address:** {form_data.get('buyer_address', 'N/A')}")
+            st.write(f"• **Type:** {form_data.get('buyer_registration_type', 'N/A')}")
             
-            # Invoice type moved to Step 1 for all users
-            invoice_type = st.selectbox(
-                "📑 Invoice Type",
-                ["Sale Invoice", "Credit Note", "Debit Note"],
-                index=["Sale Invoice", "Credit Note", "Debit Note"].index(
-                    form_data.get("invoice_type", "Sale Invoice")
-                ) if form_data.get("invoice_type", "Sale Invoice") in [
-                    "Sale Invoice", "Credit Note", "Debit Note"
-                ] else 0,
-                help="Select the type of invoice you are creating",
-            )
-
-            # Invoice date moved to Step 1 as well
-            invoice_date = st.date_input("📅 Invoice Date", value=form_data["invoice_date"])
-
-            # Invoice reference number moved to Step 1
-            invoice_ref_no = st.text_input(
-                "🔢 Invoice Reference No *",
-                value=form_data["invoice_ref_no"],
-                placeholder="Enter reference number",
-                help="Required: Enter your internal invoice reference number",
-            )
-
-            col1, col2 = st.columns(2)
+            st.markdown("**📄 Invoice Information:**")
+            st.write(f"• **Type:** {form_data.get('invoice_type', 'N/A')}")
+            st.write(f"• **Date:** {form_data.get('invoice_date', 'N/A')}")
+            st.write(f"• **Reference:** {form_data.get('invoice_ref_no', 'N/A')}")
+            st.write(f"• **Scenario:** {form_data.get('scenario_id', 'N/A')}")
+        
+        with col2:
+            st.markdown("**📦 Product Details:**")
+            st.write(f"• **HS Code:** {form_data.get('hs_code', 'N/A')}")
+            st.write(f"• **Description:** {form_data.get('product_description', 'N/A')}")
+            st.write(f"• **Rate:** {form_data.get('rate', 'N/A')}")
+            st.write(f"• **UOM:** {form_data.get('uom', 'N/A')}")
+            st.write(f"• **Quantity:** {form_data.get('quantity', 'N/A')}")
+            st.write(f"• **Value:** ₨ {form_data.get('value_sales_excluding_st', 0.0):,.2f}")
             
-            with col1:
-                buyer_ntn_cnic = st.text_input(
-                    "🆔 Buyer NTN/CNIC", 
-                    value=form_data["buyer_ntn_cnic"],
-                    placeholder="Enter buyer NTN/CNIC",
-                    help="Enter the buyer's NTN or CNIC number"
-                )
-                buyer_business_name = st.text_input(
-                    "🏢 Buyer Business Name *", 
-                    value=form_data["buyer_business_name"],
-                    placeholder="Enter business name",
-                    help="Required: Enter the buyer's business name"
-                )
-                buyer_province = st.selectbox(
-                    "🌍 Buyer Province *",
-                    [
-                        "",
-                        "Sindh",
-                        "Punjab", 
-                        "Khyber Pakhtunkhwa",
-                        "Balochistan",
-                        "Gilgit-Baltistan",
-                        "Azad Kashmir",
-                        "Islamabad Capital Territory",
-                    ],
-                    index=0 if not form_data["buyer_province"] else [
-                        "", "Sindh", "Punjab", "Khyber Pakhtunkhwa", "Balochistan",
-                        "Gilgit-Baltistan", "Azad Kashmir", "Islamabad Capital Territory"
-                    ].index(form_data["buyer_province"]) if form_data["buyer_province"] in [
-                        "", "Sindh", "Punjab", "Khyber Pakhtunkhwa", "Balochistan",
-                        "Gilgit-Baltistan", "Azad Kashmir", "Islamabad Capital Territory"
-                    ] else 0
-                )
-            
-            with col2:
-                buyer_address = st.text_input(
-                    "📍 Buyer Address *", 
-                    value=form_data["buyer_address"],
-                    placeholder="Enter buyer address",
-                    help="Required: Enter the buyer's complete address"
-                )
-                buyer_registration_type = st.selectbox(
-                    "📋 Registration Type *", 
-                    ["", "Unregistered", "Registered"],
-                    index=0 if not form_data["buyer_registration_type"] else ["", "Unregistered", "Registered"].index(form_data["buyer_registration_type"]) if form_data["buyer_registration_type"] in ["", "Unregistered", "Registered"] else 0
-                )
-            
-            # Update session state
-            st.session_state.invoice_form_data.update({
-                "buyer_ntn_cnic": buyer_ntn_cnic,
-                "buyer_business_name": buyer_business_name,
-                "buyer_province": buyer_province,
-                "buyer_address": buyer_address,
-                "buyer_registration_type": buyer_registration_type,
-                "invoice_type": invoice_type,
-                "invoice_date": invoice_date,
-                "invoice_ref_no": invoice_ref_no,
-            })
-            
-        # Invoice Information (shown inline)
-        if True:
-            st.markdown("#### 📄 Step 2: Invoice Information")
-            st.info("💡 Enter the invoice details and reference information.")
-            
-            col1, col2 = st.columns(2)
-            
-            with col1:
-                pass
-            
-            with col2:
-                scenario_id = st.text_input(
-                    "🎯 Scenario ID *", 
-                    value=form_data["scenario_id"],
-                    placeholder="Enter scenario ID (e.g., SN002)",
-                    help="Required: Enter the FBR scenario ID (e.g., SN002)"
-                )
-                sale_type = st.text_input(
-                    "🏪 Sale Type",
-                    value=form_data.get("sale_type", ""),
-                    placeholder="Optional sale type label"
-                )
-            
-            # Update session state
-            st.session_state.invoice_form_data.update({
-                "scenario_id": scenario_id,
-                "sale_type": sale_type,
-            })
-            
-        # Product Items (shown inline)
-        if True:
-            st.markdown("#### 📦 Step 3: Product Items")
-            st.info("💡 Enter the product details and pricing information.")
-            
-            col1, col2 = st.columns(2)
-            
-            with col1:
-                hs_code = st.text_input(
-                    "🏷️ HS Code *", 
-                    value=form_data["hs_code"],
-                    placeholder="Enter HS code",
-                    help="Required: Enter the Harmonized System code"
-                )
-                product_description = st.text_input(
-                    "📝 Product Description *", 
-                    value=form_data["product_description"],
-                    placeholder="Enter product description",
-                    help="Required: Enter detailed product description"
-                )
-                rate = st.text_input(
-                    "📊 Tax Rate *", 
-                    value=form_data["rate"],
-                    placeholder="Enter tax rate (e.g., 18%)",
-                    help="Required: Enter the tax rate percentage"
-                )
-                uom = st.text_input(
-                    "📏 Unit of Measure *", 
-                    value=form_data["uom"],
-                    placeholder="Enter unit of measure",
-                    help="Required: Enter unit of measure (e.g., PCS, KG, LTR)"
-                )
-            
-            with col2:
-                quantity = st.number_input(
-                    "🔢 Quantity *", 
-                    min_value=1, 
-                    value=int(form_data["quantity"]),
-                    help="Required: Enter the quantity"
-                )
-                value_sales_excluding_st = st.number_input(
-                    "💰 Value (Excluding Sales Tax) *", 
-                    min_value=0.0, 
-                    value=form_data["value_sales_excluding_st"],
-                    help="Required: Enter the value excluding sales tax"
-                )
-                sales_tax_applicable = st.number_input(
-                    "🏛️ Sales Tax Applicable", 
-                    min_value=0.0, 
-                    value=form_data["sales_tax_applicable"]
-                )
-                further_tax = st.number_input(
-                    "➕ Further Tax", 
-                    min_value=0.0, 
-                    value=form_data["further_tax"]
-                )
-            
-            # Additional fields
-            col3, col4 = st.columns(2)
-            with col3:
-                extra_tax = st.number_input("📈 Extra Tax", min_value=0.0, value=form_data["extra_tax"])
-                sales_tax_withheld = st.number_input("⚖️ Sales Tax Withheld at Source", min_value=0.0, value=form_data["sales_tax_withheld"])
-                fed_payable = st.number_input("🏦 FED Payable", min_value=0.0, value=form_data["fed_payable"])
-            
-            with col4:
-                discount = st.number_input("💸 Discount", min_value=0.0, value=form_data["discount"])
-                sale_type = st.text_input("🏪 Sale Type", value=form_data["sale_type"], placeholder="Enter sale type")
-                sro_schedule_no = st.text_input("📋 SRO Schedule No", value=form_data["sro_schedule_no"], placeholder="Enter SRO schedule number")
-            
-            sro_item_serial_no = st.text_input("🔢 SRO Item Serial No", value=form_data["sro_item_serial_no"], placeholder="Enter SRO item serial number")
-            
-            # Calculate total
-            total_values = (
-                value_sales_excluding_st
-                + sales_tax_applicable
-                + further_tax
-                + extra_tax
-                - discount
-            )
-            
-            st.markdown(
-                f"""
-            <div style="background: linear-gradient(135deg, #10b981 0%, #059669 100%); 
-                        color: white; padding: 1rem; border-radius: 10px; text-align: center; margin: 1rem 0;">
-                <h3 style="margin: 0;">💰 Total Invoice Value</h3>
-                <h2 style="margin: 0.5rem 0 0 0;">₨ {total_values:,.2f}</h2>
-            </div>
-            """,
-                unsafe_allow_html=True,
-            )
-            
-            # Update session state
-            st.session_state.invoice_form_data.update({
-                "hs_code": hs_code,
-                "product_description": product_description,
-                "rate": rate,
-                "uom": uom,
-                "quantity": quantity,
-                "value_sales_excluding_st": value_sales_excluding_st,
-                "sales_tax_applicable": sales_tax_applicable,
-                "further_tax": further_tax,
-                "extra_tax": extra_tax,
-                "sales_tax_withheld": sales_tax_withheld,
-                "fed_payable": fed_payable,
-                "discount": discount,
-                "sale_type": sale_type,
-                "sro_schedule_no": sro_schedule_no,
-                "sro_item_serial_no": sro_item_serial_no
-            })
-            
-        # Review and Submit (shown inline)
-        if True:
-            st.markdown("#### ✅ Step 4: Review & Submit")
-            st.info("💡 Review all information before submitting to FBR.")
-            
-            # Display summary
-            form_data = st.session_state.invoice_form_data
-            
-            col1, col2 = st.columns(2)
-            
-            with col1:
-                st.markdown("**🛒 Buyer Information:**")
-                st.write(f"• **Name:** {form_data['buyer_business_name']}")
-                st.write(f"• **NTN/CNIC:** {form_data['buyer_ntn_cnic'] or 'N/A'}")
-                st.write(f"• **Province:** {form_data['buyer_province']}")
-                st.write(f"• **Address:** {form_data['buyer_address']}")
-                st.write(f"• **Type:** {form_data['buyer_registration_type']}")
-                
-                st.markdown("**📄 Invoice Information:**")
-                st.write(f"• **Type:** {form_data['invoice_type']}")
-                st.write(f"• **Date:** {form_data['invoice_date']}")
-                st.write(f"• **Reference:** {form_data['invoice_ref_no']}")
-                st.write(f"• **Scenario:** {form_data['scenario_id']}")
-            
-            with col2:
-                st.markdown("**📦 Product Details:**")
-                st.write(f"• **HS Code:** {form_data['hs_code']}")
-                st.write(f"• **Description:** {form_data['product_description']}")
-                st.write(f"• **Rate:** {form_data['rate']}")
-                st.write(f"• **UOM:** {form_data['uom']}")
-                st.write(f"• **Quantity:** {form_data['quantity']}")
-                st.write(f"• **Value:** ₨ {form_data['value_sales_excluding_st']:,.2f}")
-                
-                total_values = (
-                    form_data['value_sales_excluding_st']
-                    + form_data['sales_tax_applicable']
-                    + form_data['further_tax']
-                    + form_data['extra_tax']
-                    - form_data['discount']
-                )
-                st.markdown(f"**💰 Total Amount:** ₨ {total_values:,.2f}")
-            
-            # Actions handled below; no back or direct submit buttons here
-
-        # Items section (removed duplicate legacy expander)
-
-       # Replace the validation and posting section in show_invoice_form() with this:
+            st.markdown(f"**💰 Total Amount:** ₨ {total_values:,.2f}")
 
         # Action buttons
         st.markdown("### 🚀 Invoice Actions")
@@ -3741,40 +3724,42 @@ def show_invoice_form():
             if st.button(
                 "✅ Validate Invoice", use_container_width=True, type="secondary"
             ):
-                # Create invoice data structure
+                # Create invoice data structure from latest form data
+                form_data = st.session_state.invoice_form_data
+                
                 invoice_data = {
                     "sellerNTNCNIC": seller[1],
                     "sellerBusinessName": seller[2],
                     "sellerProvince": seller[3],
                     "sellerAddress": seller[4],
-                    "invoiceType": invoice_type,
-                    "invoiceDate": invoice_date.strftime("%Y-%m-%d"),
-                    "buyerNTNCNIC": buyer_ntn_cnic,
-                    "buyerBusinessName": buyer_business_name,
-                    "buyerProvince": buyer_province,
-                    "buyerAddress": buyer_address,
-                    "buyerRegistrationType": buyer_registration_type,
-                    "invoiceRefNo": invoice_ref_no,
-                    "scenarioId": scenario_id,
+                    "invoiceType": form_data.get("invoice_type", "Sale Invoice"),
+                    "invoiceDate": form_data.get("invoice_date", date.today()).strftime("%Y-%m-%d"),
+                    "buyerNTNCNIC": form_data.get("buyer_ntn_cnic", ""),
+                    "buyerBusinessName": form_data.get("buyer_business_name", ""),
+                    "buyerProvince": form_data.get("buyer_province", ""),
+                    "buyerAddress": form_data.get("buyer_address", ""),
+                    "buyerRegistrationType": form_data.get("buyer_registration_type", ""),
+                    "invoiceRefNo": form_data.get("invoice_ref_no", ""),
+                    "scenarioId": form_data.get("scenario_id", ""),
                     "items": [
                         {
-                            "hsCode": hs_code,
-                            "productDescription": product_description,
-                            "rate": rate,
-                            "uoM": uom,
-                            "quantity": quantity,
-                            "valueSalesExcludingST": value_sales_excluding_st,
-                            "salesTaxApplicable": sales_tax_applicable,
-                            "furtherTax": further_tax,
-                            "extraTax": extra_tax,
-                            "salesTaxWithheldAtSource": sales_tax_withheld,
+                            "hsCode": form_data.get("hs_code", ""),
+                            "productDescription": form_data.get("product_description", ""),
+                            "rate": form_data.get("rate", ""),
+                            "uoM": form_data.get("uom", ""),
+                            "quantity": form_data.get("quantity", 1),
+                            "valueSalesExcludingST": form_data.get("value_sales_excluding_st", 0.0),
+                            "salesTaxApplicable": form_data.get("sales_tax_applicable", 0.0),
+                            "furtherTax": form_data.get("further_tax", 0.0),
+                            "extraTax": form_data.get("extra_tax", 0.0),
+                            "salesTaxWithheldAtSource": form_data.get("sales_tax_withheld", 0.0),
                             "fixedNotifiedValueOrRetailPrice": 0.00,
-                            "fedPayable": fed_payable,
-                            "discount": discount,
+                            "fedPayable": form_data.get("fed_payable", 0.0),
+                            "discount": form_data.get("discount", 0.0),
                             "totalValues": total_values,
-                            "saleType": sale_type,
-                            "sroScheduleNo": sro_schedule_no,
-                            "sroItemSerialNo": sro_item_serial_no,
+                            "saleType": form_data.get("sale_type", ""),
+                            "sroScheduleNo": form_data.get("sro_schedule_no", ""),
+                            "sroItemSerialNo": form_data.get("sro_item_serial_no", ""),
                         }
                     ],
                 }
@@ -3782,22 +3767,22 @@ def show_invoice_form():
                 # Local validation
                 errors = []
                 required_fields = [
-                    (buyer_business_name, "Buyer Business Name"),
-                    (buyer_province, "Buyer Province"),
-                    (buyer_address, "Buyer Address"),
-                    (buyer_registration_type, "Buyer Registration Type"),
-                    (scenario_id, "Scenario ID"),
-                    (hs_code, "HS Code"),
-                    (product_description, "Product Description"),
-                    (rate, "Tax Rate"),
-                    (uom, "Unit of Measure"),
+                    (form_data.get("buyer_business_name"), "Buyer Business Name"),
+                    (form_data.get("buyer_province"), "Buyer Province"),
+                    (form_data.get("buyer_address"), "Buyer Address"),
+                    (form_data.get("buyer_registration_type"), "Buyer Registration Type"),
+                    (form_data.get("scenario_id"), "Scenario ID"),
+                    (form_data.get("hs_code"), "HS Code"),
+                    (form_data.get("product_description"), "Product Description"),
+                    (form_data.get("rate"), "Tax Rate"),
+                    (form_data.get("uom"), "Unit of Measure"),
                 ]
 
                 for field_value, field_name in required_fields:
                     if not field_value:
                         errors.append(f"{field_name} is required")
 
-                if value_sales_excluding_st <= 0:
+                if form_data.get("value_sales_excluding_st", 0.0) <= 0:
                     errors.append("Value (Excluding Sales Tax) must be greater than 0")
 
                 if errors:
@@ -3822,17 +3807,15 @@ def show_invoice_form():
                         if status_code == 200:
                             create_success_message("✅ FBR Validation Successful!")
                             
-                            # Store validated invoice data in session for later use
                             st.session_state.validated_invoice_data = invoice_data
                             st.session_state.validated_invoice_response = response
                             
                             st.json(response)
                             
-                            # Generate PDF immediately after validation
                             st.markdown("### 📄 Invoice PDF")
                             try:
                                 pdf_buffer = generate_invoice_pdf(invoice_data, response)
-                                invoice_filename = f"Invoice_{seller[1]}_{invoice_date.strftime('%Y-%m-%d')}.pdf"
+                                invoice_filename = f"Invoice_{seller[1]}_{form_data.get('invoice_date', date.today()).strftime('%Y-%m-%d')}.pdf"
 
                                 st.download_button(
                                     label="📄 Download Invoice PDF",
@@ -3857,7 +3840,8 @@ def show_invoice_form():
 
         with col6:
             if st.button("📤 Post to FBR", use_container_width=True, type="primary"):
-                # Use stored validated data if available, otherwise create new
+                form_data = st.session_state.invoice_form_data
+                
                 if hasattr(st.session_state, 'validated_invoice_data'):
                     invoice_data = st.session_state.validated_invoice_data
                 else:
@@ -3866,52 +3850,51 @@ def show_invoice_form():
                         "sellerBusinessName": seller[2],
                         "sellerProvince": seller[3],
                         "sellerAddress": seller[4],
-                        "invoiceType": invoice_type,
-                        "invoiceDate": invoice_date.strftime("%Y-%m-%d"),
-                        "buyerNTNCNIC": buyer_ntn_cnic,
-                        "buyerBusinessName": buyer_business_name,
-                        "buyerProvince": buyer_province,
-                        "buyerAddress": buyer_address,
-                        "buyerRegistrationType": buyer_registration_type,
-                        "invoiceRefNo": invoice_ref_no,
-                        "scenarioId": scenario_id,
+                        "invoiceType": form_data.get("invoice_type", "Sale Invoice"),
+                        "invoiceDate": form_data.get("invoice_date", date.today()).strftime("%Y-%m-%d"),
+                        "buyerNTNCNIC": form_data.get("buyer_ntn_cnic", ""),
+                        "buyerBusinessName": form_data.get("buyer_business_name", ""),
+                        "buyerProvince": form_data.get("buyer_province", ""),
+                        "buyerAddress": form_data.get("buyer_address", ""),
+                        "buyerRegistrationType": form_data.get("buyer_registration_type", ""),
+                        "invoiceRefNo": form_data.get("invoice_ref_no", ""),
+                        "scenarioId": form_data.get("scenario_id", ""),
                         "items": [
                             {
-                                "hsCode": hs_code,
-                                "productDescription": product_description,
-                                "rate": rate,
-                                "uoM": uom,
-                                "quantity": quantity,
-                                "valueSalesExcludingST": value_sales_excluding_st,
-                                "salesTaxApplicable": sales_tax_applicable,
-                                "furtherTax": further_tax,
-                                "extraTax": extra_tax,
-                                "salesTaxWithheldAtSource": sales_tax_withheld,
+                                "hsCode": form_data.get("hs_code", ""),
+                                "productDescription": form_data.get("product_description", ""),
+                                "rate": form_data.get("rate", ""),
+                                "uoM": form_data.get("uom", ""),
+                                "quantity": form_data.get("quantity", 1),
+                                "valueSalesExcludingST": form_data.get("value_sales_excluding_st", 0.0),
+                                "salesTaxApplicable": form_data.get("sales_tax_applicable", 0.0),
+                                "furtherTax": form_data.get("further_tax", 0.0),
+                                "extraTax": form_data.get("extra_tax", 0.0),
+                                "salesTaxWithheldAtSource": form_data.get("sales_tax_withheld", 0.0),
                                 "fixedNotifiedValueOrRetailPrice": 0.00,
-                                "fedPayable": fed_payable,
-                                "discount": discount,
+                                "fedPayable": form_data.get("fed_payable", 0.0),
+                                "discount": form_data.get("discount", 0.0),
                                 "totalValues": total_values,
-                                "saleType": sale_type,
-                                "sroScheduleNo": sro_schedule_no,
-                                "sroItemSerialNo": sro_item_serial_no,
+                                "saleType": form_data.get("sale_type", ""),
+                                "sroScheduleNo": form_data.get("sro_schedule_no", ""),
+                                "sroItemSerialNo": form_data.get("sro_item_serial_no", ""),
                             }
                         ],
                     }
 
-                # Quick validation
                 required_fields = [
-                    buyer_business_name,
-                    buyer_province,
-                    buyer_address,
-                    buyer_registration_type,
-                    scenario_id,
-                    hs_code,
-                    product_description,
-                    rate,
-                    uom,
+                    form_data.get("buyer_business_name"),
+                    form_data.get("buyer_province"),
+                    form_data.get("buyer_address"),
+                    form_data.get("buyer_registration_type"),
+                    form_data.get("scenario_id"),
+                    form_data.get("hs_code"),
+                    form_data.get("product_description"),
+                    form_data.get("rate"),
+                    form_data.get("uom"),
                 ]
 
-                if not all(required_fields) or value_sales_excluding_st <= 0:
+                if not all(required_fields) or form_data.get("value_sales_excluding_st", 0.0) <= 0:
                     create_error_message(
                         "Cannot post: Please validate the form first and fix all errors!"
                     )
@@ -3927,10 +3910,9 @@ def show_invoice_form():
                             )
                             st.json(response)
                             
-                            # Generate updated PDF with FBR response data after posting
                             try:
                                 pdf_buffer = generate_invoice_pdf(invoice_data, response)
-                                invoice_filename = f"Invoice_Posted_{seller[1]}_{invoice_date.strftime('%Y-%m-%d')}.pdf"
+                                invoice_filename = f"Invoice_Posted_{seller[1]}_{form_data.get('invoice_date', date.today()).strftime('%Y-%m-%d')}.pdf"
 
                                 st.download_button(
                                     label="📄 Download Updated Invoice PDF (with FBR Data)",
