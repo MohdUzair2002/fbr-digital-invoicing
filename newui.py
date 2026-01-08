@@ -13,6 +13,8 @@ from reportlab.lib.units import inch, cm
 from reportlab.lib import colors
 from reportlab.lib.enums import TA_CENTER, TA_RIGHT, TA_LEFT
 import io
+from openpyxl import load_workbook
+
 import base64
 import time
 from functools import lru_cache
@@ -1757,12 +1759,12 @@ def generate_invoice_pdf(invoice_data, fbr_response=None):
 
     # Handle buyer registration display
     buyer_display_name = invoice_data.get("buyerBusinessName", "N/A")
-    if invoice_data.get("buyerRegistrationType") == "Unregistered":
-        buyer_display_name = "Un-Registered"
+    # if invoice_data.get("buyerRegistrationType") == "Unregistered":
+    #     buyer_display_name = "Un-Registered"
 
     buyer_reg_no = invoice_data.get("buyerNTNCNIC", "")
-    if not buyer_reg_no or invoice_data.get("buyerRegistrationType") == "Unregistered":
-        buyer_reg_no = "9999999"
+    # if not buyer_reg_no or invoice_data.get("buyerRegistrationType") == "Unregistered":
+    #     buyer_reg_no = "9999999"
 
     buyer_info_data = [
         [
@@ -1863,10 +1865,10 @@ def generate_invoice_pdf(invoice_data, fbr_response=None):
 
     for item in invoice_data.get("items", []):
         qty = item.get("quantity", 0)
-        value = item.get("valueSalesExcludingST", 0)
+        value = float(item.get("valueSalesExcludingST", 0))
         rate = item.get("rate", "0")
-        sales_tax = item.get("salesTaxApplicable", 0)
-        amount = item.get("totalValues", 0)
+        sales_tax = float(item.get("salesTaxApplicable", 0))
+        amount = float(item.get("totalValues", 0))
 
         # Format rate exactly as in sample (18%)
         if not str(rate).endswith("%"):
@@ -1882,10 +1884,10 @@ def generate_invoice_pdf(invoice_data, fbr_response=None):
                 description,
                 item.get("hsCode", ""),
                 str(int(qty)),  # Remove decimal for quantity
-                f"{int(value):,}",  # Format as in sample: 6,000
+                f"{value:,.2f}",  # Format with decimals
                 rate,
-                f"{int(sales_tax):,}",  # Format as in sample: 1,080
-                f"{int(amount):,}",  # Format as in sample: 7,080
+                f"{sales_tax:,.2f}",  # Format with decimals
+                f"{amount:,.2f}",  # Format with decimals
             ]
         )
 
@@ -1931,9 +1933,9 @@ def generate_invoice_pdf(invoice_data, fbr_response=None):
 
     # Summary totals - exactly as in sample format
     totals_data = [
-        ["Value (Excluding Sales Tax)", f"{int(total_value_excluding_st):,}"],
-        ["Sales Tax", f"{int(total_sales_tax):,}"],
-        ["Value (Including Sales Tax)", f"{int(total_amount):,}"],
+        ["Value (Excluding Sales Tax)", f"{total_value_excluding_st:,.2f}"],
+        ["Sales Tax", f"{total_sales_tax:,.2f}"],
+        ["Value (Including Sales Tax)", f"{total_amount:,.2f}"],
     ]
 
     totals_table = Table(totals_data, colWidths=[2.5 * inch, 1.5 * inch])
@@ -2300,12 +2302,15 @@ def go_to_excel_invoice(seller_id):
 
 
 # Auto-detection mapping for common column patterns
+# FIXED: Updated COLUMN_MAPPINGS dictionary with better buyer_type detection
+
 COLUMN_MAPPINGS = {
     # Buyer Information
     "buyer_reg_no": [
         "registration no",
         "buyer registration no",
         "buyerntnccnic",
+        "buyerNTNCNIC",
         "buyer ntn",
         "buyer cnic",
         "ntn",
@@ -2324,14 +2329,22 @@ COLUMN_MAPPINGS = {
         "client name",
         "party name",
     ],
+    # FIXED: Improved buyer_type detection with more patterns
     "buyer_type": [
-        "type",
-        "buyer type",
-        "registration type",
+        "buyerregistrationtype",
         "buyer registration type",
-        "registered",
-        "unregistered",
+        "registration type",
+        "buyer type",
+        "type",
         "reg type",
+        "registration status",
+        "buyer status",
+        "status",
+        "unregistered",  # Added these common values
+        "registered",
+        "un-registered",
+        "un registered",
+        "registrationtype",
     ],
     "buyer_province": [
         "sale origination province",
@@ -2410,6 +2423,18 @@ COLUMN_MAPPINGS = {
         "percentage",
         "tax percentage",
     ],
+    "scenario_id": [
+    "scenarioid",
+    "scenario id",
+    "scenario_id",
+    "scenario",
+    "scenario code",
+    "fbr scenario",
+    "sn code",
+    "sn001",
+    "sn002",
+    "sn003",
+],
     "value_excl_st": [
         "value of sales excluding sales tax",
         "value excluding sales tax",
@@ -2444,10 +2469,76 @@ COLUMN_MAPPINGS = {
 }
 
 
+# FIXED: Enhanced auto_detect_columns function with debug info
+# FIXED: Simpler and more reliable approach
+
+# FIXED: Simpler and more reliable approach
+
+def read_excel_simple_preserve_zeros(uploaded_file):
+    """
+    Simple approach: Read Excel with pandas using string dtype
+    This preserves leading zeros without complex openpyxl logic
+    """
+    try:
+        # Reset file pointer
+        uploaded_file.seek(0)
+        
+        # Read all sheets with string dtype
+        df_dict = pd.read_excel(
+            uploaded_file,
+            sheet_name=None,
+            dtype=str,  # Force all columns as string
+            keep_default_na=False,
+            na_values=[]
+        )
+        
+        return df_dict
+        
+    except Exception as e:
+        print(f"Error reading Excel: {e}")
+        # Fallback: read normally
+        uploaded_file.seek(0)
+        return pd.read_excel(uploaded_file, sheet_name=None)
+
+
+def restore_leading_zeros(value, expected_length=None):
+    """
+    Restore leading zeros ONLY if they were actually lost during Excel import
+    NTN can be 7, 13 digits or CNIC can be 13 digits
+    Don't pad if already in valid length
+    """
+    if value is None or value == "":
+        return ""
+    
+    value_str = str(value).strip()
+    
+    # Valid NTN/CNIC lengths: 7, 13 digits
+    valid_lengths = [7, 13]
+    
+    # If it's all digits and already valid length, keep as-is
+    if value_str.isdigit() and len(value_str) in valid_lengths:
+        return value_str
+    
+    # If it's all digits but wrong length, it might have lost leading zeros
+    # Pad to 13 digits (most common for CNIC)
+    if value_str.isdigit() and len(value_str) < 7:
+        # Only pad if very short (definitely lost leading zeros)
+        value_str = value_str.zfill(13)
+    elif value_str.isdigit() and 7 < len(value_str) < 13:
+        # Between 7 and 13, likely lost leading zeros
+        value_str = value_str.zfill(13)
+    
+    return value_str
+
+
+# FIXED: auto_detect_columns - keep it simple and working
 def auto_detect_columns(df_columns):
     """Automatically detect and map Excel columns to required fields"""
     detected_mapping = {}
     df_columns_lower = [str(col).lower().strip() for col in df_columns]
+    
+    print(f"DEBUG - Available Excel columns: {df_columns}")
+    print(f"DEBUG - Lowercase columns: {df_columns_lower}")
 
     for field_key, possible_names in COLUMN_MAPPINGS.items():
         best_match = None
@@ -2461,56 +2552,88 @@ def auto_detect_columns(df_columns):
                 if col_name == pattern_lower:
                     best_match = df_columns[col_idx]
                     best_score = 100
+                    print(f"DEBUG - Exact match for {field_key}: '{best_match}'")
                     break
 
                 # Partial match scoring
                 if pattern_lower in col_name or col_name in pattern_lower:
-                    # Calculate similarity score
                     score = len(set(pattern_lower.split()) & set(col_name.split())) * 10
-                    if col_name.startswith(
-                        pattern_lower[:5]
-                    ) or pattern_lower.startswith(col_name[:5]):
+                    if col_name.startswith(pattern_lower[:5]) or pattern_lower.startswith(col_name[:5]):
                         score += 5
 
                     if score > best_score:
                         best_match = df_columns[col_idx]
                         best_score = score
 
-        if best_match and best_score >= 5:  # Minimum confidence threshold
-            detected_mapping[field_key] = best_match
+            if best_score >= 100:
+                break
 
+        if best_match and best_score >= 5:
+            detected_mapping[field_key] = best_match
+            print(f"DEBUG - Detected {field_key}: '{best_match}' (score: {best_score})")
+
+    print(f"DEBUG - Total detected mappings: {len(detected_mapping)}")
+    print(f"DEBUG - Final mapping: {detected_mapping}")
     return detected_mapping
 
 
+# FIXED: process_excel_row_auto with proper zero handling
 def process_excel_row_auto(row, mapping, seller, idx):
     """Process a single Excel row using auto-detected mapping"""
     try:
-        # Extract buyer info with safe string conversion
-        buyer_registration_no = str(
-            row.get(mapping.get("buyer_reg_no", ""), "")
-        ).strip()
+        # FIXED: Get NTN/CNIC - handle 7 or 13 digit formats
+        ntn_col = mapping.get("buyer_reg_no", "")
+        buyer_registration_no = ""
+        
+        if ntn_col:
+            ntn_value = row.get(ntn_col, "")
+            buyer_registration_no = str(ntn_value).strip() if ntn_value else ""
+            
+            # Check if it's numeric
+            if buyer_registration_no.isdigit():
+                current_len = len(buyer_registration_no)
+                
+                # Valid formats: 7 or 13 digits
+                if current_len == 7 or current_len == 13:
+                    # Already valid length, keep as-is
+                    print(f"DEBUG Row {idx+1}: NTN/CNIC valid length: {current_len} digits")
+                elif current_len < 7:
+                    # Very short - probably lost leading zeros, pad to 13
+                    buyer_registration_no = buyer_registration_no.zfill(13)
+                    print(f"DEBUG Row {idx+1}: Restored leading zeros: '{buyer_registration_no}'")
+                elif 7 < current_len < 13:
+                    # Between 7-13 digits - likely lost leading zeros, pad to 13
+                    buyer_registration_no = buyer_registration_no.zfill(13)
+                    print(f"DEBUG Row {idx+1}: Padded to 13 digits: '{buyer_registration_no}'")
+                else:
+                    # More than 13 digits - keep as-is (might be correct)
+                    print(f"DEBUG Row {idx+1}: NTN/CNIC is {current_len} digits")
+            else:
+                # Non-numeric (e.g., "Un-Register"), keep as-is
+                print(f"DEBUG Row {idx+1}: Non-numeric NTN/CNIC: '{buyer_registration_no}'")
+        
+        print(f"DEBUG Row {idx+1}: Final NTN/CNIC = '{buyer_registration_no}' (len: {len(buyer_registration_no)})")
+        
+        # Extract other buyer info
         buyer_business_name = str(row.get(mapping.get("buyer_name", ""), "")).strip()
-        buyer_registration_type = str(
-            row.get(mapping.get("buyer_type", ""), "Unregistered")
-        ).strip()
-        buyer_province_value = str(
-            row.get(mapping.get("buyer_province", ""), "Sindh")
-        ).strip()
-        buyer_address_value = str(
-            row.get(mapping.get("buyer_address", ""), "N/A")
-        ).strip().replace("\n", " ")
-
-        # Handle unregistered buyers
-        if (
-            "unregistered" in buyer_registration_type.lower()
-            or "un-register" in buyer_business_name.lower()
-            or buyer_registration_no == "9999999"
-        ):
-            buyer_registration_no = "9999999"
-            buyer_business_name = "Un-Registered"
+        
+        # Registration type
+        buyer_type_value = row.get(mapping.get("buyer_type", ""), "Unregistered")
+        buyer_registration_type = str(buyer_type_value).strip()
+        
+        # Normalize the registration type
+        buyer_registration_type_lower = buyer_registration_type.lower()
+        if any(word in buyer_registration_type_lower for word in ["registered", "yes", "true", "1"]):
+            buyer_registration_type = "Registered"
+        elif any(word in buyer_registration_type_lower for word in ["unregistered", "un-registered", "un registered", "no", "false", "0"]):
             buyer_registration_type = "Unregistered"
+        else:
+            buyer_registration_type = "Unregistered"
+        
+        buyer_province_value = str(row.get(mapping.get("buyer_province", ""), "Sindh")).strip()
+        buyer_address_value = str(row.get(mapping.get("buyer_address", ""), "N/A")).strip().replace("\n", " ")
 
-        # Extract invoice details
+        # Invoice details
         invoice_date_value = row.get(mapping.get("invoice_date", ""), date.today())
         if isinstance(invoice_date_value, str):
             try:
@@ -2520,20 +2643,20 @@ def process_excel_row_auto(row, mapping, seller, idx):
         elif hasattr(invoice_date_value, "date"):
             invoice_date_value = invoice_date_value.date()
 
-        invoice_ref_no = str(
-            row.get(mapping.get("invoice_ref", ""), f"REF-{idx+1}")
-        ).strip()
+        invoice_ref_no = str(row.get(mapping.get("invoice_ref", ""), f"REF-{idx+1}")).strip()
 
-        # Extract item details
+        # Scenario ID and Item details
+        scenario_id = str(row.get(mapping.get("scenario_id", ""), "SN002")).strip()
+        if not scenario_id or scenario_id == "":
+            scenario_id = "SN002"  # Default fallback
+        
         hs_code_value = str(row.get(mapping.get("hs_code", ""), "")).strip()
-        product_description = str(
-            row.get(mapping.get("product_desc", ""), "No details")
-        ).strip()
+        product_description = str(row.get(mapping.get("product_desc", ""), "No details")).strip()
 
         # Safe numeric conversions
         def safe_float_convert(value, default=0.0):
             try:
-                if pd.isna(value) or value == "":
+                if pd.isna(value) or value == "" or value is None:
                     return default
                 return float(str(value).replace(",", "").replace("%", "").strip())
             except (ValueError, TypeError):
@@ -2542,7 +2665,7 @@ def process_excel_row_auto(row, mapping, seller, idx):
         quantity = safe_float_convert(row.get(mapping.get("quantity", ""), 1), 1.0)
         uom_value = str(row.get(mapping.get("uom", ""), "PCS")).strip()
 
-        # Handle rate value
+        # Handle rate
         rate_raw = row.get(mapping.get("rate", ""), "18")
         rate_value = str(rate_raw).strip()
         if "%" not in rate_value:
@@ -2553,18 +2676,12 @@ def process_excel_row_auto(row, mapping, seller, idx):
             except:
                 rate_value = "18%"
 
-        value_excluding_st = safe_float_convert(
-            row.get(mapping.get("value_excl_st", ""), 0)
-        )
-        sales_tax_applicable = safe_float_convert(
-            row.get(mapping.get("sales_tax", ""), 0)
-        )
-
-        # Optional fields
+        value_excluding_st = safe_float_convert(row.get(mapping.get("value_excl_st", ""), 0))
+        sales_tax_applicable = safe_float_convert(row.get(mapping.get("sales_tax", ""), 0))
         further_tax = safe_float_convert(row.get(mapping.get("further_tax", ""), 0))
-        extra_tax = 0.0  # Not commonly in Excel formats
-        st_withheld = 0.0  # Not commonly in Excel formats
-        fed_payable = 0.0  # Not commonly in Excel formats
+        extra_tax = 0.0
+        st_withheld = 0.0
+        fed_payable = 0.0
         discount = safe_float_convert(row.get(mapping.get("discount", ""), 0))
         sale_type_value = str(row.get(mapping.get("sale_type", ""), "")).strip()
 
@@ -2598,7 +2715,7 @@ def process_excel_row_auto(row, mapping, seller, idx):
             "buyerAddress": buyer_address_value,
             "buyerRegistrationType": buyer_registration_type,
             "invoiceRefNo": invoice_ref_no,
-            "scenarioId": "SN002",  # Default scenario
+            "scenarioId": scenario_id,  # Use dynamic scenario ID from Excel
             "items": [
                 {
                     "hsCode": hs_code_value,
@@ -2630,7 +2747,19 @@ def process_excel_row_auto(row, mapping, seller, idx):
         }, None
 
     except Exception as e:
+        print(f"DEBUG Row {idx+1} Error: {str(e)}")
         return None, f"Row {idx+1}: {str(e)}"
+
+
+
+
+
+
+
+# ============================================================================
+# UPDATE YOUR show_excel_invoice_auto() FUNCTION
+# ============================================================================
+# Replace the file reading section with this:
 
 
 # Enhanced Pages
@@ -3483,7 +3612,7 @@ def show_invoice_form():
             placeholder="Enter reference number",
             help="Required: Enter your internal invoice reference number",
         )
-
+        
         col1, col2 = st.columns(2)
         
         with col1:
@@ -3643,7 +3772,7 @@ def show_invoice_form():
         sro_item_serial_no = st.text_input("🔢 SRO Item Serial No", value=form_data.get("sro_item_serial_no", ""), placeholder="Enter SRO item serial number")
         
         # Calculate total
-        total_values = (
+        total_values = float(
             value_sales_excluding_st
             + sales_tax_applicable
             + further_tax
@@ -4018,11 +4147,9 @@ def show_excel_invoice_auto():
 
     if uploaded_file is not None:
         try:
-            # Read Excel file
-            df_dict = pd.read_excel(
-                uploaded_file, sheet_name=None, dtype={"hsCode": str, "rate": str}
-            )
-
+            # FIXED: Use simple string-based reading
+            df_dict = read_excel_simple_preserve_zeros(uploaded_file)
+            
             # Find main data sheet
             main_df = None
             sheet_name = None
@@ -4069,6 +4196,9 @@ def show_excel_invoice_auto():
 
             # Clean column names
             main_df.columns = [str(col).strip() for col in main_df.columns]
+            
+            # IMPORTANT: Keep data as strings for auto-detection
+            main_df = main_df.astype(str)
 
             # Auto-detect columns
             st.markdown("### 🤖 Auto-Detection Results")
@@ -4085,10 +4215,10 @@ def show_excel_invoice_auto():
                 with col1:
                     st.markdown(
                         """
-                    <div class="custom-card">
-                        <h4 style="color: var(--text-primary);">🎯 Detected Mappings</h4>
-                    </div>
-                    """,
+                        <div class="custom-card">
+                            <h4 style="color: var(--text-primary);">🎯 Detected Mappings</h4>
+                        </div>
+                        """,
                         unsafe_allow_html=True,
                     )
 
@@ -4099,10 +4229,10 @@ def show_excel_invoice_auto():
                 with col2:
                     st.markdown(
                         """
-                    <div class="custom-card">
-                        <h4 style="color: var(--text-primary);">📊 Detection Status</h4>
-                    </div>
-                    """,
+                        <div class="custom-card">
+                            <h4 style="color: var(--text-primary);">📊 Detection Status</h4>
+                        </div>
+                        """,
                         unsafe_allow_html=True,
                     )
 
@@ -4134,7 +4264,6 @@ def show_excel_invoice_auto():
                     <div style="font-size: 3rem; margin-bottom: 1rem;">⚠️</div>
                     <h3>Auto-Detection Issue</h3>
                     <p>Could not auto-detect column mappings. Please check your Excel format.</p>
-                    <p><strong>Tip:</strong> Make sure your Excel has columns like: Name, Registration No, Value, Rate, etc.</p>
                 </div>
                 """,
                     unsafe_allow_html=True,
@@ -4142,16 +4271,8 @@ def show_excel_invoice_auto():
 
             # Show data preview
             st.markdown("### 📋 Data Preview")
-
-            st.markdown(
-                """
-            <div class="custom-card">
-            """,
-                unsafe_allow_html=True,
-            )
-
+            st.markdown("<div class='custom-card'>", unsafe_allow_html=True)
             st.dataframe(main_df.head(10), use_container_width=True)
-
             st.markdown("</div>", unsafe_allow_html=True)
 
             if len(main_df) > 10:
@@ -4177,9 +4298,6 @@ def show_excel_invoice_auto():
                     create_error_message(
                         f"Cannot process: Missing required fields: {', '.join(missing_display)}"
                     )
-                    st.info(
-                        "💡 Please ensure your Excel has at least Buyer Name and Value columns"
-                    )
                 else:
                     processed_invoices = []
                     processing_errors = []
@@ -4187,7 +4305,7 @@ def show_excel_invoice_auto():
                     progress_bar = st.progress(0)
                     status_text = st.empty()
 
-                    for idx, row in main_df.iterrows():
+                    for idx, (_, row) in enumerate(main_df.iterrows()):
                         status_text.text(f"Processing row {idx + 1} of {len(main_df)}")
                         progress_bar.progress((idx + 1) / len(main_df))
 
@@ -4203,29 +4321,21 @@ def show_excel_invoice_auto():
                     progress_bar.empty()
                     status_text.empty()
 
-                    # Store processed data
                     st.session_state.processed_invoices = processed_invoices
 
-                    # Show processing results
                     if processed_invoices:
                         create_success_message(
                             f"Successfully processed {len(processed_invoices)} invoices!"
                         )
 
-                        st.markdown("### 📊 Processing Summary")
                         col1, col2, col3 = st.columns(3)
-
                         with col1:
                             create_stats_card(len(processed_invoices), "Total Invoices")
                         with col2:
-                            total_amount = sum(
-                                [inv["amount"] for inv in processed_invoices]
-                            )
+                            total_amount = sum([inv["amount"] for inv in processed_invoices])
                             create_stats_card(f"₨ {total_amount:,.0f}", "Total Amount")
                         with col3:
-                            create_stats_card(
-                                len(processing_errors), "Processing Errors"
-                            )
+                            create_stats_card(len(processing_errors), "Processing Errors")
 
                         if processing_errors:
                             with st.expander(
@@ -4235,14 +4345,12 @@ def show_excel_invoice_auto():
                                     st.error(f"• {error}")
                     else:
                         create_error_message("No valid invoices could be processed")
-                        if processing_errors:
-                            st.error("**Errors encountered:**")
-                            for error in processing_errors:
-                                st.error(f"• {error}")
 
         except Exception as e:
             create_error_message(f"Error reading Excel file: {str(e)}")
             st.info("Please ensure your file is a valid Excel (.xlsx or .xls) format")
+
+
 
    # Action buttons for processed invoices
     if st.session_state.processed_invoices:
@@ -4578,6 +4686,7 @@ def show_excel_invoice_auto():
                                     pdf_buffer = generate_invoice_pdf(
                                         result["invoice_data"], result["response"]
                                     )
+                                    print(result['invoice_data'])
                                     safe_buyer_name = "".join(
                                         c
                                         for c in result["buyer_name"]
@@ -4672,7 +4781,8 @@ def show_excel_invoice_auto():
             "scenarioId": ["0101.21"],
             "item_1_hsCode": ["Test Product"],
             "item_1_productDescription": ["18%"],
-            "item_1_rate": ["Numbers, pieces, units"],
+            "item_1_rate": ["Num"
+            "bers, pieces, units"],
             "item_1_uoM": ["1"],
             "item_1_quantity": ["1000"],
             "item_1_valueSalesExcludingST": ["180"],
