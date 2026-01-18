@@ -813,7 +813,7 @@ def validate_invoice_api(invoice_data, bearer_token):
 def post_invoice_api(invoice_data, bearer_token):
     """Send invoice data to FBR post API endpoint"""
     try:
-        api_url = "https://gw.fbr.gov.pk/di_data/v1/di/postinvoicedata_sb"
+        api_url = "https://gw.fbr.gov.pk/di_data/v1/di/postinvoicedata"
         headers = {
             "Content-Type": "application/json",
             "Authorization": f"Bearer {bearer_token}",
@@ -2039,7 +2039,7 @@ def validate_invoice_api(invoice_data, bearer_token):
 def post_invoice_api(invoice_data, bearer_token):
     """Send invoice data to FBR post API endpoint"""
     try:
-        api_url = "https://gw.fbr.gov.pk/di_data/v1/di/postinvoicedata_sb"
+        api_url = "https://gw.fbr.gov.pk/di_data/v1/di/postinvoicedata"
         headers = {
             "Content-Type": "application/json",
             "Authorization": f"Bearer {bearer_token}",
