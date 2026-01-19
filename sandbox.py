@@ -1864,7 +1864,7 @@ def generate_invoice_pdf(invoice_data, fbr_response=None):
     total_amount = 0
 
     for item in invoice_data.get("items", []):
-        qty = item.get("quantity", 0)
+        qty = float(item.get("quantity", 0))
         value = float(item.get("valueSalesExcludingST", 0))
         rate = item.get("rate", "0")
         sales_tax = float(item.get("salesTaxApplicable", 0))
@@ -1883,7 +1883,7 @@ def generate_invoice_pdf(invoice_data, fbr_response=None):
             [
                 description,
                 item.get("hsCode", ""),
-                str(int(qty)),  # Remove decimal for quantity
+                str(float(qty)),  # Remove decimal for quantity
                 f"{value:,.2f}",  # Format with decimals
                 rate,
                 f"{sales_tax:,.2f}",  # Format with decimals
@@ -3736,8 +3736,8 @@ def show_invoice_form():
         with col2:
             quantity = st.number_input(
                 "🔢 Quantity *", 
-                min_value=1, 
-                value=int(form_data.get("quantity", 1)),
+                min_value=float(1), 
+                value=float(form_data.get("quantity", 1)),
                 help="Required: Enter the quantity"
             )
             value_sales_excluding_st = st.number_input(
